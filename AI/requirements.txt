@@ -1,8 +1,7 @@
-fastapi
-uvicorn
-pydantic
-python-dotenv
-openai
-requests
-whois
-tldextract
+fastapi==0.111.0
+uvicorn==0.30.0
+openai==1.35.0
+python-dotenv==1.0.1
+pydantic==2.7.4
+python-whois==0.9.4
+python-dateutil==2.9.0

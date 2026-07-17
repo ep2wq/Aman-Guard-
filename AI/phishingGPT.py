@@ -249,5 +249,17 @@ async def analyze_message(input_data: MessageInput):
         handle_debug_output(fallback_result, "/analyze-message (Fallback)")
         return fallback_result
 
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "ai_engine": "AmanGuard AI v1.0",
+        "openai_connected": client is not None
+    }
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    # Bind :: (IPv6 wildcard, accepts IPv4 too on Linux), NOT 0.0.0.0 — Railway's
+    # private network is IPv6-only, so 0.0.0.0 would be unreachable from the
+    # backend at ai-engine.railway.internal:8000. See note below.
+    uvicorn.run(app, host="::", port=port)
