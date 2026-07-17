@@ -1,10 +1,11 @@
 import os
 import json
+import secrets
 import argparse
 import uvicorn
 from datetime import datetime
 from urllib.parse import urlparse
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -34,6 +35,30 @@ if api_key:
 else:
     client = None
     print("⚠️ تحذير: OPENAI_API_KEY غير موجود.")
+
+# ==========================================
+# 0.1 حماية الخدمة (Service Auth)
+# ==========================================
+# This service spends the OpenAI key on every request and must never be callable
+# by anyone but the AmanGuard backend. AI_SERVICE_KEY must match the backend's
+# amanguard.ai.api-key (AI_API_KEY), which it sends as "Authorization: Bearer …".
+# Unset (local dev / docker-compose) → open, exactly as before.
+AI_SERVICE_KEY = os.getenv("AI_SERVICE_KEY", "").strip()
+
+if not AI_SERVICE_KEY:
+    # ASCII only: the Windows console is cp1252 and raises UnicodeEncodeError
+    # on emoji/Arabic, which would kill startup for local dev.
+    print("[AmanGuard AI] AI_SERVICE_KEY not set - service is OPEN (local dev only).")
+
+
+def require_service_key(authorization: str | None = Header(default=None)):
+    """Reject anything without the shared bearer token once a key is configured."""
+    if not AI_SERVICE_KEY:
+        return
+    expected = f"Bearer {AI_SERVICE_KEY}"
+    # compare_digest: constant-time, avoids leaking the key via timing.
+    if not authorization or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # ==========================================
 # 1. هياكل البيانات
@@ -134,7 +159,8 @@ def get_domain_age(domain: str) -> int:
 # 3. مسارات الـ APIs
 # ==========================================
 
-@app.post("/analyze-url", response_model=URLAnalysisResponse)
+@app.post("/analyze-url", response_model=URLAnalysisResponse,
+          dependencies=[Depends(require_service_key)])
 async def analyze_url(request: URLRequest):
     domain = extract_domain(request.url)
 
@@ -178,7 +204,8 @@ async def analyze_url(request: URLRequest):
     handle_debug_output(result, "/analyze-url")
     return result
 
-@app.post("/analyze-message", response_model=PhishingAnalysis)
+@app.post("/analyze-message", response_model=PhishingAnalysis,
+          dependencies=[Depends(require_service_key)])
 async def analyze_message(input_data: MessageInput):
     if not client:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is missing")

@@ -3,9 +3,11 @@ spring:
     name: amanguard-backend
 
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/amanguard_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
-    username: amanguard_user
-    password: AmanGuard@12345
+    # Defaults target a local MySQL for `./mvnw spring-boot:run`. Docker and
+    # Railway override all three via env vars — no credential is baked in.
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/amanguard_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8}
+    username: ${SPRING_DATASOURCE_USERNAME:amanguard_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:AmanGuard@12345}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   flyway:
@@ -23,7 +25,9 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
 
 server:
-  port: 8080
+  # Railway injects PORT and routes its public domain to it — the app MUST
+  # listen there. Falls back to 8080 for local dev and docker-compose.
+  port: ${PORT:8080}
 
 amanguard:
   fraud:
