@@ -251,6 +251,57 @@ async def analyze_message(input_data: MessageInput):
         )
 
         result = response.choices[0].message.parsed
+
+        # ── Hard score floor enforcement ─────────────────────────────────────
+        # GPT-4o-mini sometimes undershoots — enforce minimums in Python
+        import re as _re
+
+        text_lower = input_data.message_text.lower()
+
+        # Check for high-risk signals
+        has_otp        = any(w in text_lower for w in ["otp", "رمز التحقق", "رمز تحقق", "كلمة مرور", "رمز المرور"])
+        has_url        = bool(_re.search(r'https?://', input_data.message_text))
+        has_suspicious_tld = any(tld in text_lower for tld in [".ru", ".tk", ".xyz", ".pw", ".cc", ".top"])
+        has_urgency    = any(w in text_lower for w in ["فوراً", "عاجل", "دقيقة", "ساعة", "الآن", "urgent", "immediately"])
+        has_amount     = bool(_re.search(r'\d[\d,]*\s*(ريال|SAR|ر\.س)', input_data.message_text))
+        has_bank_name  = any(b in text_lower for b in ["الأهلي", "الراجحي", "الإنماء", "سامبا", "snb", "rajhi", "anb"])
+
+        # Apply floors
+        if has_otp and has_url and has_suspicious_tld and has_urgency:
+            # Critical combo — floor at 95
+            if result.risk_score < 95:
+                result = PhishingAnalysis(
+                    is_phishing=True,
+                    risk_score=95,
+                    risk_level="Critical",
+                    recommended_action="HOLD_TRANSACTION",
+                    reasons=result.reasons or ["رسالة احتيال حرجة: تجمع طلب OTP + رابط مشبوه + ضغط زمني"],
+                    red_flags=result.red_flags or ["OTP request", "Suspicious URL", "Time pressure"]
+                )
+        elif has_otp and has_url:
+            # OTP + URL — floor at 88
+            if result.risk_score < 88:
+                result = PhishingAnalysis(
+                    is_phishing=True,
+                    risk_score=88,
+                    risk_level="High",
+                    recommended_action="HOLD_TRANSACTION",
+                    reasons=result.reasons or ["طلب OTP مع رابط خارجي — نمط احتيال معروف"],
+                    red_flags=result.red_flags or ["OTP request", "External URL"]
+                )
+        elif has_otp:
+            # OTP alone — floor at 82
+            if result.risk_score < 82:
+                result = PhishingAnalysis(
+                    is_phishing=True,
+                    risk_score=82,
+                    risk_level="High",
+                    recommended_action="HOLD_TRANSACTION",
+                    reasons=result.reasons or ["طلب رمز OTP — البنوك لا تطلب ذلك أبداً"],
+                    red_flags=result.red_flags or ["OTP request"]
+                )
+        # ── End enforcement ───────────────────────────────────────────────────
+
         handle_debug_output(result, "/analyze-message")
         return result
 
