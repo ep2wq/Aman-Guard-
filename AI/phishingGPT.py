@@ -259,7 +259,4 @@ async def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    # Bind :: (IPv6 wildcard, accepts IPv4 too on Linux), NOT 0.0.0.0 — Railway's
-    # private network is IPv6-only, so 0.0.0.0 would be unreachable from the
-    # backend at ai-engine.railway.internal:8000. See note below.
-    uvicorn.run(app, host="::", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)
